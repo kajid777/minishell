@@ -1,0 +1,109 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   command_search.c                                   :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: thashimo <thashimo@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/02/18 12:06:49 by thashimo          #+#    #+#             */
+/*   Updated: 2025/03/11 16:58:50 by thashimo         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "exec.h"
+
+char	*get_all_path(char **envp)
+{
+	int	i;
+
+	i = 0;
+	while (envp[i] != NULL)
+	{
+		if (ft_strlen(envp[i]) >= 5 && ft_strncmp(envp[i], "PATH=", 5) == 0)
+		{
+			return (envp[i] + 5);
+		}
+		i++;
+	}
+	return (NULL);
+}
+
+void	is_dir(const char *cmd)
+{
+	struct stat	st;
+
+	if (stat(cmd, &st) == 0)
+	{
+		if (S_ISDIR(st.st_mode))
+		{
+			ft_putstr_fd(" Is a directory\n", 2);
+			exit(126);
+		}
+		if (access(cmd, X_OK) != 0)
+		{
+			perror("access");
+			exit(126);
+		}
+	}
+}
+
+int	check_other(char **args, t_context *ctx, char **envp)
+{
+	if (ft_strchr(args[0], '/'))
+	{
+		is_dir(args[0]);
+		if (execve(args[0], args, envp) == -1)
+		{
+			if (errno == ENOENT)
+				ft_putstr_fd(" No such file or directory\n", 2);
+			else
+				perror("execve");
+			ctx->last_status = 127;
+			exit(127);
+		}
+		ctx->last_status = 0;
+		return (1);
+	}
+	if (builtin_execute(args, ctx))
+		return (1);
+	return (0);
+}
+
+void	execute_command_helper(char *full_path, char **cmds,
+								char **envp, t_context *ctx)
+{
+	struct sigaction	sa;
+
+	(void)(ctx);
+	sigemptyset(&sa.sa_mask);
+	sa.sa_handler = SIG_DFL;
+	sa.sa_flags = 0;
+	sigaction(SIGQUIT, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	if (execve(full_path, cmds, envp) == -1)
+	{
+		free(full_path);
+		exit(EXIT_FAILURE);
+	}
+	free(full_path);
+}
+
+void	ft_execvp(char **cmds, char **envp, t_context *ctx)
+{
+	char	*full_path;
+
+	if (!cmds || !cmds[0] || !envp)
+		exit(0);
+	if (check_other(cmds, ctx, envp))
+	{
+		return ;
+	}
+	full_path = generate_path(cmds, envp, ctx);
+	if (!full_path)
+	{
+		ft_putstr_fd(" command not found\n", 2);
+		ctx->last_status = 127;
+		exit(127);
+	}
+	execute_command_helper(full_path, cmds, envp, ctx);
+}
